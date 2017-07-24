@@ -3,20 +3,23 @@
 namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
-use MongoDB\Client as Mongo;
+use Illuminate\Support\Facades\DB;
 
 class MoviesController extends Controller
 {
     public function index(Request $request, $id) 
     {
-       $client = $this->_getMongoClient();
+        $moviesRow = DB::table('movies')->where(['userId' => $id])->first();
 
-       $collection = $client->supermovies->movies;
+        $movies = [];
+        if ($moviesRow) {
+            $moviesJsonString = $moviesRow->movies;
 
-       $result = $collection->findOne(['userId' => $id]);
+            $movies = json_decode($moviesJsonString, true);
+        }
 
        return response()->json([
-        'result' => $result
+        'result' => $movies
        ], 200);
     }
     
@@ -26,34 +29,29 @@ class MoviesController extends Controller
 
         $movies = json_decode($encodedMovies, true);
 
-        $client = $this->_getMongoClient();
-
-        $collection = $client->supermovies->movies;
-
-        $query = ['userId' => $id];
-
-        $entry = $collection->findOne($query);
-
-        if (!$entry) {
-            $collection->insertOne([
-                'userId' => $id,
-                'movies' => $movies
+        if (json_last_error() !== JSON_ERROR_NONE) {
+            return response()->json([
+                'message' => 'Malformed json data'
             ]);
         }
+
+        $moviesRow = DB::table('movies')->where(['userId' => $id])->first();
+
+        if ($moviesRow) {
+            DB::table('movies')
+                ->where(['userId' => $id])
+                ->update(['movies' => $encodedMovies]);
+        }
         else {
-           $collection->findOneAndReplace($query, [
-               'userId' => $id,
-               'movies' => $movies
-           ]);
+            DB::table('movies')
+                ->insert([
+                    'userId' => $id,
+                    'movies' => $encodedMovies
+                ]);
         }
 
         return response()->json([
             'result' => $movies
         ], 200);
-    }
-
-    private function _getMongoClient()
-    {
-        return new Mongo("mongodb://localhost:27017");
     }
 }
